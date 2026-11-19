@@ -18,6 +18,7 @@ extension NSColor {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
+    private var dismissMonitors: [Any] = []
     let store = PowerStore()
     let pm = PmHelperManager()
 
@@ -36,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 780, height: 480)
         popover.contentViewController = NSHostingController(rootView: PopoverView(store: store))
+        installDismissMonitors()
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.closePopoverIfShown()
+        }
         store.start()
         pm.startMonitoring()
         pm.enable()
@@ -100,6 +107,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return true
         }
+    }
+
+    // .accessory apps never become active, so .transient alone misses clicks
+    // landing in other apps or on the desktop; watch those explicitly.
+    private func installDismissMonitors() {
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
+            DispatchQueue.main.async { self?.closePopoverIfShown() }
+        }) {
+            dismissMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
+            DispatchQueue.main.async {
+                guard let self, self.popover.isShown else { return }
+                let popoverWindow = self.popover.contentViewController?.view.window
+                let statusWindow = self.statusItem.button?.window
+                if event.window !== popoverWindow, event.window !== statusWindow {
+                    self.popover.performClose(nil)
+                }
+            }
+            return event
+        }) {
+            dismissMonitors.append(local)
+        }
+    }
+
+    private func closePopoverIfShown() {
+        if popover.isShown { popover.performClose(nil) }
     }
 
     @objc private func handleClick() {
