@@ -42,18 +42,18 @@ struct SummaryBar: View {
         HStack(spacing: 0) {
             ForEach(Array(chips.enumerated()), id: \.element.id) { i, chip in
                 if i > 0 {
-                    Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 16).padding(.horizontal, 10)
+                    Rectangle().fill(Palette.hairline).frame(width: 1, height: 16).padding(.horizontal, 10)
                 }
                 HStack(spacing: 6) {
                     Image(systemName: chip.symbol).font(.system(size: 11, weight: .semibold)).foregroundStyle(chip.tint)
-                    Text(chip.label).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6)).lineLimit(1).fixedSize()
-                    Text(chip.value).font(.system(size: 11, weight: .bold)).foregroundStyle(chip.valueTint ?? .white).lineLimit(1).fixedSize()
+                    Text(chip.label).font(.system(size: 11)).foregroundStyle(Palette.textSoft).lineLimit(1).fixedSize()
+                    Text(chip.value).font(.system(size: 11, weight: .bold)).foregroundStyle(chip.valueTint ?? Palette.text).lineLimit(1).fixedSize()
                 }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.summaryBg))
     }
 }

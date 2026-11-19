@@ -42,6 +42,40 @@ struct PowerSample: Equatable {
         otherW: 3.5
     )
 
+    static let assist = PowerSample(
+        ts: Date(),
+        onAC: true,
+        adapterW: 30.0,
+        adapterRatedW: 30,
+        batteryW: -8.5,
+        soc: 64,
+        systemW: 38.5,
+        cpuW: 14.0,
+        gpuW: 6.0,
+        cpuUtil: 0.52,
+        gpuUtil: 40,
+        cpuMeasured: true,
+        usb: [UsbDevice(name: "USB-C Hub", watts: 2.5)],
+        otherW: 16.0
+    )
+
+    static let low = PowerSample(
+        ts: Date(),
+        onAC: false,
+        adapterW: 0,
+        adapterRatedW: 0,
+        batteryW: -6.0,
+        soc: 12,
+        systemW: 6.0,
+        cpuW: 2.0,
+        gpuW: 0.5,
+        cpuUtil: 0.1,
+        gpuUtil: 8,
+        cpuMeasured: false,
+        usb: [],
+        otherW: 3.5
+    )
+
     static func lerp(_ a: PowerSample, _ b: PowerSample, _ t: Double) -> PowerSample {
         func m(_ x: Double, _ y: Double) -> Double { x + (y - x) * t }
         var usbNames: [String] = []

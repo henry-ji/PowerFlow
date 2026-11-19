@@ -32,7 +32,7 @@ final class PowerStore: ObservableObject {
     private func refresh() {
         queue.async { [weak self] in
             guard let self else { return }
-            let sample = ProcessInfo.processInfo.environment["PF_SYNTHETIC"] == "ac" ? PowerSample.demo : self.buildSample()
+            let sample = Self.syntheticSample() ?? self.buildSample()
             // PMU telemetry reads zero for a few seconds around plug/unplug events; keep last good sample.
             guard sample.systemW > 0.05 else { return }
             DispatchQueue.main.async { self.publish(sample) }
@@ -44,6 +44,15 @@ final class PowerStore: ObservableObject {
         target = sample
         animStart = Date()
         onChange?(sample)
+    }
+
+    static func syntheticSample() -> PowerSample? {
+        switch ProcessInfo.processInfo.environment["PF_SYNTHETIC"] {
+        case "ac": return .demo
+        case "assist": return .assist
+        case "low": return .low
+        default: return nil
+        }
     }
 
     func buildSample() -> PowerSample {

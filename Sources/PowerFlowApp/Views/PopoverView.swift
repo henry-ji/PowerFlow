@@ -8,7 +8,7 @@ struct PopoverView: View {
             let sample = store.sample(at: context.date)
             VStack(spacing: 10) {
                 HStack(spacing: 10) {
-                    Text("Power Flow").font(.system(size: 16, weight: .heavy)).foregroundStyle(.white)
+                    Text("Power Flow").font(.system(size: 16, weight: .heavy)).foregroundStyle(Palette.text)
                     Text(sample.cpuMeasured ? "MEASURED" : "LIVE")
                         .font(.system(size: 9, weight: .bold))
                         .padding(.horizontal, 8).padding(.vertical, 3)
@@ -16,7 +16,7 @@ struct PopoverView: View {
                         .foregroundStyle(.white)
                     Spacer()
                     if sample.onAC, sample.adapterRatedW > 0 {
-                        Text("Adapter \(sample.adapterRatedW) W").font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
+                        Text("Adapter \(sample.adapterRatedW) W").font(.system(size: 10)).foregroundStyle(Palette.textFaint)
                     }
                 }
                 SummaryBar(sample: sample)
@@ -30,8 +30,6 @@ struct PopoverView: View {
             .frame(width: 780, height: 480)
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.shell))
         }
-        .environment(\.colorScheme, .dark)
-        .preferredColorScheme(.dark)
     }
 
     @ViewBuilder
@@ -46,7 +44,7 @@ struct PopoverView: View {
             Spacer()
             Text("SoC \(Int(s.soc.rounded()))% · CPU \(Int((s.cpuUtil * 100).rounded()))% · GPU \(Int(s.gpuUtil.rounded()))%")
                 .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(Palette.textFaint)
         }
         .padding(.horizontal, 4)
     }
@@ -54,8 +52,8 @@ struct PopoverView: View {
     private func legendItem(_ tint: Color, _ name: String, _ watts: Double) -> some View {
         HStack(spacing: 5) {
             Circle().fill(tint).frame(width: 7, height: 7)
-            Text(name).font(.system(size: 10)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
-            Text(wattsText(watts) + " W").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
+            Text(name).font(.system(size: 10)).foregroundStyle(Palette.textSoft).lineLimit(1)
+            Text(wattsText(watts) + " W").font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.text)
         }
     }
 }

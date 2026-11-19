@@ -2,7 +2,7 @@
 
 An AlDente Pro "Power Flow"-style macOS menu bar app that draws a live Sankey diagram of your Mac's power flow: where power comes from (power adapter / battery), total system load, and how it splits across CPU, GPU, attached USB devices and other components. Ribbon width is proportional to wattage.
 
-The menu bar icon shows a bolt plus the current signed battery power: green `+45.0W` while charging, amber `−9.0W` while discharging, neutral `0.0W` when balanced (monospaced digits, refreshed every 2 s). Click it to open the live diagram popover.
+The menu bar shows only a battery glyph whose fill tracks state of charge, with a bolt overlay while charging and an amber fill below 20% on battery (refreshed every 2 s); hovering it reveals SoC, charge state and signed battery power in a tooltip. Click it to open the live diagram popover, which follows the system light/dark appearance.
 
 > 中文文档：[README.zh-CN.md](README.zh-CN.md)
 
@@ -14,10 +14,10 @@ The menu bar icon shows a bolt plus the current signed battery power: green `+45
 ./make-dmg.sh     # distributable image dist/PowerFlow.dmg (drag-to-install shortcut)
 ```
 
-- Menu bar resident: bolt icon + signed battery power (+ charge / − discharge), color follows charge state, adapts to light/dark appearance
+- Menu bar resident: battery glyph only (fill = SoC, bolt = charging, amber = low), adapts to light/dark appearance; signed battery power lives in the tooltip and the popover
 - Left-click the menu bar icon: open / close the flow popover
 - Right-click the menu bar icon: save a snapshot PNG, uninstall the measurement daemon, quit
-- Samples every 2 s; popover values and ribbons transition smoothly, with a flowing-band animation
+- Samples every 2 s; popover values and ribbons transition smoothly, with a flowing-band animation; the whole popover follows the system light/dark mode
 - CPU/GPU power is always measured by the built-in powermetrics daemon (one-time admin authorization on first launch, then automatic — see below)
 
 ## Diagram structure
@@ -29,8 +29,15 @@ The menu bar icon shows a bolt plus the current signed battery power: green `+45
 
 - On AC: adapter input splits into "system load" + "battery charging"
 - On battery: discharge flows into the system hub, then splits to consumers
+- Adapter insufficient (system load exceeds adapter input, e.g. a 30 W charger under heavy load): adapter **and** battery appear as two source nodes feeding the hub simultaneously; the battery ribbon carries the deficit and the summary bar shows Battery as a negative amber value
 - Top summary bar: Power Adapter / MacBook / Battery(±) / CPU / GPU / USB at a glance
 - Bottom legend: per-consumer wattage plus SoC, CPU and GPU utilization
+
+## Example
+
+Adapter and battery supplying the system at the same time — a 30 W adapter under heavy load, with the battery covering the 8.5 W deficit (light mode; the popover follows the system appearance):
+
+![Dual-source supply: adapter and battery ribbons feeding the MacBook hub, which splits to CPU, GPU, USB and Other](docs/assist-light.png)
 
 ## Data sources (Apple Silicon, sudo-free core)
 
@@ -101,3 +108,4 @@ Signing identity is picked by priority: Developer ID Application → Apple Devel
 - Apple Silicon only (power telemetry relies on PowerTelemetryData exposed by its PMU).
 - USB power is estimated from port power allocation (mA × 5 V) and varies with charge state; with no device attached USB shows 0.0 W.
 - Nodes for absent displays/devices hide automatically.
+- External display power: a self-powered desktop monitor draws no Mac power (video signal only), so it is not part of the diagram and cannot be measured from the Mac. A portable/USB-C-powered monitor enumerates as a USB PD sink and appears under the USB branch (port-allocation estimate). Driving any external display raises GPU/WindowServer power, which is included in the measured CPU/GPU figures but not separable as a "display" line item.

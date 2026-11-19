@@ -10,18 +10,32 @@ extension Color {
 }
 
 enum Palette {
-    static let adapter = Color(hex: 0xE6C05B)
-    static let battery = Color(hex: 0x63B267)
-    static let batteryOut = Color(hex: 0xE0A04A)
-    static let mac = Color(hex: 0x6AA4E4)
-    static let cpu = Color(hex: 0x8D7BD6)
-    static let gpu = Color(hex: 0xB06FD8)
-    static let usb = Color(hex: 0x46B3A4)
-    static let other = Color(hex: 0x9AA0A6)
-    static let streamIn = Color(hex: 0xA8934A)
-    static let streamMid = Color(hex: 0x5D87C9)
-    static let card = Color(white: 0.16)
-    static let shell = Color(white: 0.05)
+    static func adaptive(light: Color, dark: Color) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor(dark) : NSColor(light)
+        })
+    }
+    static let adapter = adaptive(light: Color(hex: 0x9A7B1F), dark: Color(hex: 0xE6C05B))
+    static let battery = adaptive(light: Color(hex: 0x2E7D32), dark: Color(hex: 0x63B267))
+    static let batteryOut = adaptive(light: Color(hex: 0xA05A00), dark: Color(hex: 0xE0A04A))
+    static let mac = adaptive(light: Color(hex: 0x3B78C4), dark: Color(hex: 0x6AA4E4))
+    static let cpu = adaptive(light: Color(hex: 0x6A55B8), dark: Color(hex: 0x8D7BD6))
+    static let gpu = adaptive(light: Color(hex: 0x8E44B8), dark: Color(hex: 0xB06FD8))
+    static let usb = adaptive(light: Color(hex: 0x1F8A7D), dark: Color(hex: 0x46B3A4))
+    static let other = adaptive(light: Color(hex: 0x6B7075), dark: Color(hex: 0x9AA0A6))
+    static let streamIn = adaptive(light: Color(hex: 0x8A7639), dark: Color(hex: 0xA8934A))
+    static let streamMid = adaptive(light: Color(hex: 0x3E6BA8), dark: Color(hex: 0x5D87C9))
+    static let card = adaptive(light: .white, dark: Color(white: 0.16))
+    static let shell = adaptive(light: Color(white: 0.93), dark: Color(white: 0.05))
+    static let text = adaptive(light: Color(white: 0.10), dark: .white)
+    static let textSoft = adaptive(light: Color(white: 0.38), dark: Color.white.opacity(0.6))
+    static let textFaint = adaptive(light: Color(white: 0.52), dark: Color.white.opacity(0.45))
+    static let hairline = adaptive(light: Color.black.opacity(0.10), dark: Color.white.opacity(0.12))
+    static let nodeFill = adaptive(light: Color.black.opacity(0.05), dark: Color.white.opacity(0.08))
+    static let nodeStroke = adaptive(light: Color.black.opacity(0.10), dark: Color.white.opacity(0.12))
+    static let summaryBg = adaptive(light: Color.black.opacity(0.04), dark: Color.white.opacity(0.05))
+    static let ribbonLabel = adaptive(light: Color(white: 0.12), dark: .white)
+    static let labelShadow = adaptive(light: Color.white.opacity(0.7), dark: Color.black.opacity(0.6))
 }
 
 func symbolName(_ candidates: [String]) -> String {
@@ -77,16 +91,18 @@ func sankeyLayout(_ s: PowerSample, size: CGSize) -> SankeyLayout {
     let charge = max(s.batteryW, 0)
     let discharge = max(-s.batteryW, 0)
     let system = s.systemW
-    let col0Total = s.onAC ? s.adapterW : discharge
+    let assist = s.onAC && discharge > 0.05
+    let col0Total = s.onAC ? (assist ? s.adapterW + discharge : s.adapterW) : discharge
     let col1Total = system + charge
 
     let gap1: CGFloat = consumers.count > 1 ? 10 : 0
     let gap0: CGFloat = charge > 0.05 ? 16 : 0
+    let gapSrc: CGFloat = assist ? 14 : 0
     let col2Nodes = consumers.count
     let gap2: CGFloat = CGFloat(max(col2Nodes - 1, 0)) * 10
 
     var scale = CGFloat.greatestFiniteMagnitude
-    if col0Total > 0.05 { scale = min(scale, H / CGFloat(col0Total)) }
+    if col0Total > 0.05 { scale = min(scale, (H - gapSrc) / CGFloat(col0Total)) }
     if col1Total > 0.05 { scale = min(scale, (H - gap0) / CGFloat(col1Total)) }
     if system > 0.05 { scale = min(scale, (H - gap2) / CGFloat(system)) }
     if scale == .greatestFiniteMagnitude || scale <= 0 { scale = 1 }
@@ -99,13 +115,27 @@ func sankeyLayout(_ s: PowerSample, size: CGSize) -> SankeyLayout {
 
     // column 0
     let srcStack = (charge > 0.05 ? th(charge) : 0) + th(system)
-    let col0H = max(th(col0Total), srcStack)
-    let col0Y = (H - col0H) / 2
-    let srcRect = CGRect(x: x0, y: col0Y, width: nodeW, height: max(col0H, 46))
-    if s.onAC {
-        out.nodes.append(SankeyNode(id: "adapter", rect: srcRect, symbol: symbolName(["powerplug.fill", "powerplug"]), tint: Palette.adapter, watts: s.adapterW, showWatts: true))
+    var srcRect = CGRect.zero
+    var adpAssistRect = CGRect.zero
+    var batAssistRect = CGRect.zero
+    if assist {
+        let aH = max(th(s.adapterW), 46)
+        let bH = max(th(discharge), 46)
+        var y0 = (H - (aH + gapSrc + bH)) / 2
+        adpAssistRect = CGRect(x: x0, y: y0, width: nodeW, height: aH)
+        y0 += aH + gapSrc
+        batAssistRect = CGRect(x: x0, y: y0, width: nodeW, height: bH)
+        out.nodes.append(SankeyNode(id: "adapter", rect: adpAssistRect, symbol: symbolName(["powerplug.fill", "powerplug"]), tint: Palette.adapter, watts: s.adapterW, showWatts: true))
+        out.nodes.append(SankeyNode(id: "batterysrc", rect: batAssistRect, symbol: symbolName(["battery.75", "battery.50"]), tint: Palette.batteryOut, watts: discharge, showWatts: true))
     } else {
-        out.nodes.append(SankeyNode(id: "batterysrc", rect: srcRect, symbol: symbolName(["battery.75", "battery.50"]), tint: Palette.batteryOut, watts: discharge, showWatts: true))
+        let col0H = max(th(col0Total), srcStack)
+        let col0Y = (H - col0H) / 2
+        srcRect = CGRect(x: x0, y: col0Y, width: nodeW, height: max(col0H, 46))
+        if s.onAC {
+            out.nodes.append(SankeyNode(id: "adapter", rect: srcRect, symbol: symbolName(["powerplug.fill", "powerplug"]), tint: Palette.adapter, watts: s.adapterW, showWatts: true))
+        } else {
+            out.nodes.append(SankeyNode(id: "batterysrc", rect: srcRect, symbol: symbolName(["battery.75", "battery.50"]), tint: Palette.batteryOut, watts: discharge, showWatts: true))
+        }
     }
 
     // column 1
@@ -148,8 +178,13 @@ func sankeyLayout(_ s: PowerSample, size: CGSize) -> SankeyLayout {
     }
 
     // source -> column 1
-    let srcRight = srcRect.maxX
-    if s.onAC {
+    if assist {
+        let ta = th(s.adapterW)
+        let tb = th(discharge)
+        ribbon(id: "adp-mac", sx: adpAssistRect.maxX, sy0: adpAssistRect.midY - ta / 2, sy1: adpAssistRect.midY + ta / 2, tx: macRect.minX, ty0: macRect.minY, ty1: macRect.minY + ta, from: Palette.streamIn, to: Palette.streamMid, opacity: 0.9, watts: s.adapterW)
+        ribbon(id: "bat-mac", sx: batAssistRect.maxX, sy0: batAssistRect.midY - tb / 2, sy1: batAssistRect.midY + tb / 2, tx: macRect.minX, ty0: macRect.minY + ta, ty1: macRect.minY + ta + tb, from: Palette.battery, to: Palette.streamMid, opacity: 0.9, watts: discharge)
+    } else if s.onAC {
+        let srcRight = srcRect.maxX
         var sy = srcRect.minY + (srcRect.height - srcStack) / 2
         if charge > 0.05 {
             let t = th(charge)
@@ -159,6 +194,7 @@ func sankeyLayout(_ s: PowerSample, size: CGSize) -> SankeyLayout {
         let t = th(system)
         ribbon(id: "adp-mac", sx: srcRight, sy0: sy, sy1: sy + t, tx: macRect.minX, ty0: macRect.minY, ty1: macRect.minY + t, from: Palette.streamIn, to: Palette.streamMid, opacity: 0.9, watts: system)
     } else {
+        let srcRight = srcRect.maxX
         let t = th(system)
         ribbon(id: "bat-mac", sx: srcRight, sy0: srcRect.minY + (srcRect.height - t) / 2, sy1: srcRect.minY + (srcRect.height - t) / 2 + t, tx: macRect.minX, ty0: macRect.minY, ty1: macRect.minY + t, from: Palette.battery, to: Palette.streamMid, opacity: 0.9, watts: system)
     }
@@ -219,17 +255,17 @@ struct SankeyView: View {
                         if let label = r.label {
                             Text(label)
                                 .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(.white)
-                                .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                                .foregroundStyle(Palette.ribbonLabel)
+                                .shadow(color: Palette.labelShadow, radius: 2, y: 1)
                                 .position(r.labelPoint)
                         }
                     }
                     ForEach(layout.nodes) { n in
                         ZStack {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white.opacity(0.08))
+                                .fill(Palette.nodeFill)
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                                .strokeBorder(Palette.nodeStroke, lineWidth: 1)
                             VStack(spacing: 4) {
                                 Image(systemName: n.symbol)
                                     .font(.system(size: 15, weight: .semibold))
@@ -237,7 +273,7 @@ struct SankeyView: View {
                                 if n.showWatts && n.rect.height >= 64 {
                                     Text(wattsText(n.watts) + " W")
                                         .font(.system(size: 10, weight: .semibold))
-                                        .foregroundStyle(.white.opacity(0.85))
+                                        .foregroundStyle(Palette.text)
                                 }
                             }
                         }

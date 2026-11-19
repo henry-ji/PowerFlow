@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 @main
 final class AppMain {
@@ -26,6 +27,24 @@ final class AppMain {
             ]
             let data = try! JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
             print(String(data: data, encoding: .utf8)!)
+            exit(0)
+        }
+
+        if let idx = args.firstIndex(of: "--status-icon") {
+            let path = args.indices.contains(idx + 1) ? args[idx + 1] : "/tmp/pf-status-icon.png"
+            let s = collectOnce()
+            let icon = AppDelegate.batteryIcon(soc: s.soc, charging: s.onAC && s.batteryW > 0.05, onAC: s.onAC)
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 250, pixelsHigh: 120,
+                                       bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                       isPlanar: false, colorSpaceName: .deviceRGB,
+                                       bytesPerRow: 0, bitsPerPixel: 0)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            icon.draw(in: CGRect(x: 0, y: 0, width: 250, height: 120))
+            NSGraphicsContext.restoreGraphicsState()
+            guard let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
+            try? png.write(to: URL(fileURLWithPath: path))
+            print("status icon saved: \(path)")
             exit(0)
         }
 
@@ -74,7 +93,9 @@ final class AppMain {
             store.prev = s
             store.target = s
             store.animStart = .distantPast
-            guard let image = SnapshotRenderer.render(store: store),
+            let scheme: ColorScheme? = ProcessInfo.processInfo.environment["PF_SCHEME"] == "light" ? .light
+                : (ProcessInfo.processInfo.environment["PF_SCHEME"] == "dark" ? .dark : nil)
+            guard let image = SnapshotRenderer.render(store: store, scheme: scheme),
                   let tiff = image.tiffRepresentation,
                   let rep = NSBitmapImageRep(data: tiff),
                   let png = rep.representation(using: .png, properties: [:]) else {
@@ -94,7 +115,7 @@ final class AppMain {
 
     @MainActor
     static func collectOnce() -> PowerSample {
-        if ProcessInfo.processInfo.environment["PF_SYNTHETIC"] == "ac" { return .demo }
+        if let s = PowerStore.syntheticSample() { return s }
         _ = CpuCollector.utilization()
         Thread.sleep(forTimeInterval: 0.6)
         let store = PowerStore()
