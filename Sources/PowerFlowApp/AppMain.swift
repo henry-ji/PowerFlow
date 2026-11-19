@@ -32,7 +32,6 @@ final class AppMain {
         if args.contains("--pm-status") {
             let payload: [String: Any] = [
                 "alive": PmHelperManager.helperAlive(),
-                "autoEnabled": UserDefaults.standard.object(forKey: "PMHelperAutoEnabled") as? Bool ?? true,
                 "script": PmHelperManager.scriptSource() ?? "missing"
             ]
             let data = try! JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
@@ -71,13 +70,11 @@ final class AppMain {
         if let idx = args.firstIndex(of: "--snapshot") {
             let path = args.indices.contains(idx + 1) ? args[idx + 1] : "/tmp/powerflow.png"
             let store = PowerStore()
-            let pm = PmHelperManager()
-            pm.refresh()
             let s = collectOnce()
             store.prev = s
             store.target = s
             store.animStart = .distantPast
-            guard let image = SnapshotRenderer.render(store: store, pm: pm),
+            guard let image = SnapshotRenderer.render(store: store),
                   let tiff = image.tiffRepresentation,
                   let rep = NSBitmapImageRep(data: tiff),
                   let png = rep.representation(using: .png, properties: [:]) else {

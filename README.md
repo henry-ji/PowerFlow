@@ -1,101 +1,103 @@
 # Power Flow
 
-模仿 AlDente Pro「Power Flow」的 macOS 菜单栏功耗流量图应用。菜单栏闪电图标旁直接显示当前电池功率的正负：充电为绿色 `+45.0W`、放电为琥珀色 `−9.0W`、平衡时中性色 `0.0W`（等宽数字，每 2 秒刷新）。点击图标弹出实时 Sankey 流量图：供电从哪来（电源适配器 / 电池）、系统总功耗、以及分流到 CPU、GPU、外接 USB 设备与其他组件的去向。流量带宽度与瓦数成正比。
+An AlDente Pro "Power Flow"-style macOS menu bar app that draws a live Sankey diagram of your Mac's power flow: where power comes from (power adapter / battery), total system load, and how it splits across CPU, GPU, attached USB devices and other components. Ribbon width is proportional to wattage.
 
-## 快速开始
+The menu bar icon shows a bolt plus the current signed battery power: green `+45.0W` while charging, amber `−9.0W` while discharging, neutral `0.0W` when balanced (monospaced digits, refreshed every 2 s). Click it to open the live diagram popover.
+
+> 中文文档：[README.zh-CN.md](README.zh-CN.md)
+
+## Quick start
 
 ```bash
-./run.sh          # 构建并驻留菜单栏（点击闪电图标查看）
-./make-app.sh     # 或打包为 dist/PowerFlow.app，可拷入 /Applications
-./make-dmg.sh     # 生成可分发镜像 dist/PowerFlow.dmg（含拖拽安装快捷方式）
+./run.sh          # build and stay in the menu bar (click the bolt icon)
+./make-app.sh     # or package dist/PowerFlow.app, copy into /Applications
+./make-dmg.sh     # distributable image dist/PowerFlow.dmg (drag-to-install shortcut)
 ```
 
-- 菜单栏常驻：闪电图标 + 带符号电池功率（+ 充电 / − 放电），颜色随充放电状态切换，深浅色外观自适应
-- 左键点击菜单栏图标：打开 / 关闭流量图弹窗
-- 右键点击菜单栏图标：保存快照 PNG、卸载实测守护进程、退出
-- 每 2 秒采样一次，弹窗内数值与流量带平滑过渡动画
-- 弹窗右上「实测」开关：一键切换 CPU/GPU 估算值 ↔ powermetrics 实测值（见下节）
+- Menu bar resident: bolt icon + signed battery power (+ charge / − discharge), color follows charge state, adapts to light/dark appearance
+- Left-click the menu bar icon: open / close the flow popover
+- Right-click the menu bar icon: save a snapshot PNG, uninstall the measurement daemon, quit
+- Samples every 2 s; popover values and ribbons transition smoothly, with a flowing-band animation
+- CPU/GPU power is always measured by the built-in powermetrics daemon (one-time admin authorization on first launch, then automatic — see below)
 
-## 流量图结构
+## Diagram structure
 
 ```
-[电源适配器 | 电池]  →  [MacBook 系统枢纽]  →  CPU / GPU / 各 USB 设备 / Other
-        └─(充电时)→  [电池]
+[Power Adapter | Battery]  →  [MacBook system hub]  →  CPU / GPU / each USB device / Other
+        └─(while charging)→  [Battery]
 ```
 
-- 接电源时：适配器输入功率分流为「系统负载」+「电池充电」
-- 用电池时：电池放电流向系统枢纽，再分流到各组件
-- 顶部摘要条：Power Adapter / MacBook / Battery(±) / CPU / GPU / USB 一览
-- 底部图例：各消费组件瓦数与 SoC、CPU、GPU 利用率
+- On AC: adapter input splits into "system load" + "battery charging"
+- On battery: discharge flows into the system hub, then splits to consumers
+- Top summary bar: Power Adapter / MacBook / Battery(±) / CPU / GPU / USB at a glance
+- Bottom legend: per-consumer wattage plus SoC, CPU and GPU utilization
 
-## 数据源（Apple Silicon，免 sudo 主体）
+## Data sources (Apple Silicon, sudo-free core)
 
-| 数据 | 来源 | 性质 |
+| Data | Source | Nature |
 | --- | --- | --- |
-| 适配器输入功率、电池充/放功率、系统负载 | `IOKit` AppleSmartBattery `PowerTelemetryData`（SystemPowerIn / BatteryPower / SystemLoad） | 实测 |
-| SoC、充电状态、适配器标称瓦数 | `IOKit` AppleSmartBattery | 实测 |
-| GPU 利用率 | `IOKit` IOAccelerator `PerformanceStatistics` | 实测 |
-| CPU 利用率 | `host_processor_info` | 实测 |
-| CPU / GPU 功耗 | 默认按利用率估算；开启弹窗「实测」后由内置 powermetrics 守护进程提供实测 | 估算 / 实测 |
-| USB 设备功耗 | `IOKit` IOUSBHostDevice `UsbPowerSinkAllocation`（端口供电分配 mA）× 5V | 估算 |
+| Adapter input, battery charge/discharge, system load | `IOKit` AppleSmartBattery `PowerTelemetryData` (SystemPowerIn / BatteryPower / SystemLoad) | measured |
+| SoC, charge state, adapter rated wattage | `IOKit` AppleSmartBattery | measured |
+| GPU utilization | `IOKit` IOAccelerator `PerformanceStatistics` | measured |
+| CPU utilization | `host_processor_info` | measured |
+| CPU / GPU power | built-in powermetrics daemon (auto-installed, one-time admin auth); utilization-based estimate only as fallback when no fresh measurement exists | measured / fallback |
+| USB device power | `IOKit` IOUSBHostDevice `UsbPowerSinkAllocation` (port power allocation mA) × 5 V | estimated |
 
-守恒关系：适配器输入 ≈ 系统负载 + 充电功率；系统负载 = CPU + GPU + USB + Other（估算值会按系统负载实测值归一化，保证流量图闭合）。
+Conservation: adapter input ≈ system load + charging power; system load = CPU + GPU + USB + Other (estimates are normalized against the measured system load so the diagram always closes).
 
-## 实测 CPU/GPU（内置 powermetrics 守护进程）
+## Measured CPU/GPU (built-in powermetrics daemon)
 
-`powermetrics` 需要 root 权限。应用把 `scripts/pm-helper.sh` 集成为自动管理的系统守护进程：
+`powermetrics` requires root. The app ships `scripts/pm-helper.sh` and manages it as a system daemon automatically — there is no UI toggle, measurement is always on:
 
-1. 弹窗右上开启「实测」（默认开启）→ 弹出**一次** macOS 管理员授权框；
-2. 授权后脚本安装到 `/Library/Application Support/PowerFlow/pm-helper.sh`（root 所有），
-   并注册为 LaunchDaemon `/Library/LaunchDaemons/local.powerflow.pmhelper.plist`，由 launchd 持有、开机自启；
-3. 守护进程每 2 秒采样一次，写入 `/tmp/powerflow-pm.json`（原始输出 `/tmp/pm-raw.txt`），应用读到新鲜数据即显示 MEASURED 徽章；
-4. 关闭「实测」只写入停止标记 `/tmp/powerflow-helper.stop`，守护进程暂停采样进入空闲（**无需密码**）；重新开启即恢复采样；
-5. 卸载：右键菜单「卸载实测守护进程…」或 `--pm-uninstall`（一次授权），移除 plist、脚本与标记。
+1. On launch, if the daemon is not running, the app shows **one** macOS administrator authorization prompt;
+2. After authorization the script is installed to `/Library/Application Support/PowerFlow/pm-helper.sh` (root-owned) and registered as the LaunchDaemon `/Library/LaunchDaemons/local.powerflow.pmhelper.plist`, owned by launchd, started at boot, relaunched on crash;
+3. The daemon samples every 2 s into `/tmp/powerflow-pm.json` (raw output in `/tmp/pm-raw.txt`); fresh data switches the popover badge to MEASURED;
+4. If authorization is declined or data is stale, the app falls back to utilization-based estimates (badge LIVE) and retries installation on next launch;
+5. Uninstall: right-click menu "卸载实测守护进程…" or `--pm-uninstall` (one authorization) removes plist, script and stop flag. Pause/resume sampling without a password via `--pm-stop` / `--pm-start`.
 
-守护进程崩溃时 launchd 自动拉起；应用每次启动按「实测」偏好自动接管（开启则恢复采样，关闭则置空闲）。
-仍可选传统方式手动运行：`sudo ./scripts/pm-helper.sh`（同一脚本，支持停止标记）。
+The traditional manual route still works: `sudo ./scripts/pm-helper.sh` (same script, honors the stop flag).
 
 ## CLI
 
 ```bash
-.build/release/PowerFlowApp --dump                 # 打印一次采样 JSON
-.build/release/PowerFlowApp --snapshot out.png     # 离屏渲染当前流量图 PNG
-PF_SYNTHETIC=ac ... --snapshot out.png             # 合成数据（接电+充电+USB）布局预览
-.build/release/PowerFlowApp --pm-status            # 守护进程存活 / 自动启用 / 脚本路径
-.build/release/PowerFlowApp --pm-start             # 安装并恢复采样（未安装时需一次授权）
-.build/release/PowerFlowApp --pm-stop              # 暂停采样（无需授权）
-.build/release/PowerFlowApp --pm-uninstall         # 卸载守护进程（需一次授权）
+.build/release/PowerFlowApp --dump                 # print one sample as JSON
+.build/release/PowerFlowApp --snapshot out.png     # offscreen-render the current diagram to PNG
+PF_SYNTHETIC=ac ... --snapshot out.png             # synthetic sample (AC + charging + USB) layout preview
+.build/release/PowerFlowApp --pm-status            # daemon alive / script path
+.build/release/PowerFlowApp --pm-start             # install if needed and resume sampling (one auth if absent)
+.build/release/PowerFlowApp --pm-stop              # pause sampling (no auth)
+.build/release/PowerFlowApp --pm-uninstall         # uninstall the daemon (one auth)
 ```
 
-## 项目结构
+## Project layout
 
 ```
 Sources/PowerFlowApp/
-  AppMain.swift            入口（--dump / --snapshot / 菜单栏应用）
-  AppDelegate.swift        状态栏图标、popover、右键菜单、快照
-  Collectors/              电池遥测、CPU/GPU 利用率、USB、采样与估算
-  Collectors/PmHelperManager.swift  实测守护进程安装/暂停/卸载（LaunchDaemon + 一次授权）
-  Model/PowerSample.swift  采样模型与插值
-  Views/                   摘要条、Sankey 流量图、弹窗布局
-scripts/pm-helper.sh       powermetrics 实测守护进程（应用自动安装，亦可 sudo 手动）
-run.sh / make-app.sh       启动 / 打包
+  AppMain.swift            entry point (--dump / --snapshot / menu bar app)
+  AppDelegate.swift        status item, popover, right-click menu, snapshots
+  Collectors/              battery telemetry, CPU/GPU utilization, USB, sampling & estimation
+  Collectors/PmHelperManager.swift  daemon install/pause/uninstall (LaunchDaemon + one-time auth)
+  Model/PowerSample.swift  sample model and interpolation
+  Views/                   summary bar, Sankey diagram, popover layout
+scripts/pm-helper.sh       powermetrics measurement daemon (auto-installed; also sudo-runnable)
+run.sh / make-app.sh       launch / package
 ```
 
-## 分发与签名
+## Distribution & signing
 
-`./make-dmg.sh` 产出 `dist/PowerFlow.dmg`：打开后把 Power Flow 拖入 Applications 即安装。
-签名按优先级自动选择：Developer ID Application → Apple Development → ad-hoc。
+`./make-dmg.sh` produces `dist/PowerFlow.dmg`: open it and drag Power Flow into Applications.
+Signing identity is picked by priority: Developer ID Application → Apple Development → ad-hoc.
 
-- 本机只有 Apple Development 证书时，镜像可在本机与开发设备正常使用；
-  **其他 Mac 首次打开会被 Gatekeeper 拦截**（无 Developer ID + 公证）：
-  系统设置 → 隐私与安全性 → 「仍要打开」，或终端执行 `xattr -cr /Applications/Power\ Flow.app`。
-- 面向公众分发需 Developer ID Application 证书签名并公证：
+- With only an Apple Development certificate the image works on this Mac and dev devices;
+  **other Macs get a Gatekeeper prompt on first open** (no Developer ID + notarization):
+  System Settings → Privacy & Security → "Open Anyway", or `xattr -cr /Applications/Power\ Flow.app`.
+- For public distribution, sign with a Developer ID Application certificate and notarize:
   `codesign --force --options runtime --timestamp --sign "Developer ID Application: …" dist/PowerFlow.app`
-  后 `xcrun notarytool submit dist/PowerFlow.dmg --apple-id … --team-id … --password … --wait`
-  并 `xcrun stapler staple dist/PowerFlow.dmg`。
+  then `xcrun notarytool submit dist/PowerFlow.dmg --apple-id … --team-id … --password … --wait`
+  and `xcrun stapler staple dist/PowerFlow.dmg`.
 
-## 说明
+## Notes
 
-- 仅支持 Apple Silicon（功耗遥测依赖其 PMU 寄存器暴露的 PowerTelemetryData）。
-- USB 功耗按端口供电分配（mA × 5V）估算，随充电状态变化；未接设备时 USB 显示 0.0 W。
-- 无外接显示器/设备时，对应节点自动隐藏。
+- Apple Silicon only (power telemetry relies on PowerTelemetryData exposed by its PMU).
+- USB power is estimated from port power allocation (mA × 5 V) and varies with charge state; with no device attached USB shows 0.0 W.
+- Nodes for absent displays/devices hide automatically.

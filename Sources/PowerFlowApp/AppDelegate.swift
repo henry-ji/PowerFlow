@@ -37,10 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onChange = { [weak self] sample in self?.updateStatusTitle(sample) }
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 780, height: 480)
-        popover.contentViewController = NSHostingController(rootView: PopoverView(store: store, pm: pm))
+        popover.contentViewController = NSHostingController(rootView: PopoverView(store: store))
         store.start()
         pm.startMonitoring()
-        if pm.autoEnabled { pm.enable() } else if PmHelperManager.helperAlive() { pm.disable() }
+        pm.enable()
         if ProcessInfo.processInfo.environment["PF_AUTOSHOW"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 guard let self, let button = self.statusItem.button else { return }
@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.nameFieldStringValue = "powerflow.png"
         panel.allowedContentTypes = [.png]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let image = SnapshotRenderer.render(store: store, pm: pm),
+        if let image = SnapshotRenderer.render(store: store),
            let tiff = image.tiffRepresentation,
            let rep = NSBitmapImageRep(data: tiff),
            let png = rep.representation(using: .png, properties: [:]) {
@@ -115,8 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 enum SnapshotRenderer {
     @MainActor
-    static func render(store: PowerStore, pm: PmHelperManager, size: CGSize = CGSize(width: 780, height: 480)) -> NSImage? {
-        let view = PopoverView(store: store, pm: pm).frame(width: size.width, height: size.height)
+    static func render(store: PowerStore, size: CGSize = CGSize(width: 780, height: 480)) -> NSImage? {
+        let view = PopoverView(store: store).frame(width: size.width, height: size.height)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2.0
         return renderer.nsImage

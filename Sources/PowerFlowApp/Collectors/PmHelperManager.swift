@@ -15,11 +15,6 @@ final class PmHelperManager: ObservableObject {
 
     private var timer: Timer?
 
-    var autoEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: "PMHelperAutoEnabled") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "PMHelperAutoEnabled") }
-    }
-
     func startMonitoring() {
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
@@ -44,11 +39,6 @@ final class PmHelperManager: ObservableObject {
         return kill(pid, 0) == 0 || errno == EPERM
     }
 
-    func setEnabled(_ on: Bool) {
-        autoEnabled = on
-        if on { enable() } else { disable() }
-    }
-
     func enable() {
         guard state != .authorizing else { return }
         if Self.helperAlive() {
@@ -59,7 +49,6 @@ final class PmHelperManager: ObservableObject {
         }
         guard let script = Self.scriptSource() else {
             state = .off
-            autoEnabled = false
             statusNote = "缺少 pm-helper.sh 资源，无法安装守护进程"
             return
         }
@@ -99,7 +88,6 @@ final class PmHelperManager: ObservableObject {
         let shell = "(launchctl bootout system/\(Self.label) 2>/dev/null || true) && rm -f '\(Self.plistPath)' '\(Self.installDir)/pm-helper.sh' '\(Self.stopPath)' && echo ok"
         runPrivileged(shell) { ok, out in
             if ok {
-                self.autoEnabled = false
                 self.state = .off
                 self.statusNote = "实测守护进程已卸载"
             } else {
@@ -110,7 +98,6 @@ final class PmHelperManager: ObservableObject {
 
     private func handleAuthFailure(_ out: String) {
         state = .off
-        autoEnabled = false
         let lowered = out.lowercased()
         statusNote = lowered.contains("canceled") || lowered.contains("cancelled")
             ? "已取消管理员授权，实测未开启"
@@ -137,7 +124,6 @@ final class PmHelperManager: ObservableObject {
             try process.run()
         } catch {
             state = .off
-            autoEnabled = false
             statusNote = "无法启动 osascript"
         }
     }
